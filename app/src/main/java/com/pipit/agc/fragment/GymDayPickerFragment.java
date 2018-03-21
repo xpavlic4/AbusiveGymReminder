@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
+import android.util.Log;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,12 +17,14 @@ import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.pipit.agc.adapter.WeekViewAdapter;
 import com.pipit.agc.data.MsgAndDayRecords;
 import com.pipit.agc.util.Constants;
 import com.pipit.agc.R;
 import com.pipit.agc.util.SharedPrefUtil;
+import com.pipit.agc.util.StatsContent;
 import com.pipit.agc.util.Util;
 import com.pipit.agc.views.CircleView;
 import com.pipit.agc.views.WeekViewSwipeable;
@@ -129,12 +132,13 @@ public class GymDayPickerFragment extends android.support.v4.app.Fragment {
         View cdn = weekitem.findViewById(R.id.calendar_day_name);
         cdn.setVisibility(View.GONE);
         rfd.setVisibility(View.GONE);
-        cv.setTitleText(WeekViewAdapter.getDayOfWeekText(index + 1));
+        cv.setTitleText(getDayOfWeekText(index + 1));
         cv.setBackgroundColor(ContextCompat.getColor(context, R.color.transparent));
         cv.setFillColor(Color.GRAY);
 
         if (_plannedDays.get(index)) {
-            cv.setStrokeColor(ContextCompat.getColor(context, R.color.schemethree_darkerteal));
+            cv.setStrokeColor(Util.getStyledColor(context,
+                    R.attr.colorAccent));
 
         } else {
             cv.setStrokeColor(ContextCompat.getColor(context, R.color.transparent));
@@ -147,7 +151,7 @@ public class GymDayPickerFragment extends android.support.v4.app.Fragment {
                 HashSet<String> dates = new HashSet(SharedPrefUtil.getListFromSharedPref(prefs, Constants.SHAR_PREF_PLANNED_DAYS));
 
                 if (_plannedDays.get(index)) {
-                    //The clicked date was previously a Gym Day, and we need to toggle it off
+                    //The clicked date was previously a Gym Day, and we need to showTimePickers it off
                     _plannedDays.set(index, false);
                     dates.remove(Integer.toString(index)); //This is used to keep our sharedprefs records straight
                     //cv.setTitleText(restDay);
@@ -156,10 +160,24 @@ public class GymDayPickerFragment extends android.support.v4.app.Fragment {
                     _plannedDays.set(index, true);
                     dates.add(Integer.toString(index));
                     //cv.setTitleText(gymDay);
-                    cv.setStrokeColor(ContextCompat.getColor(context, R.color.schemethree_darkerteal));
+                    cv.setStrokeColor(Util.getStyledColor(context,
+                            R.attr.colorAccent));
                 }
 
                 SharedPrefUtil.putListToSharedPref(prefs.edit(), Constants.SHAR_PREF_PLANNED_DAYS, new ArrayList(dates));
+
+                //If the triggered day is today, then edit today's gym status too
+                Calendar c = Calendar.getInstance();
+                int dayOfWeek = c.get(Calendar.DAY_OF_WEEK);
+                if (dayOfWeek == index+1){
+                    try {
+                        toggleCurrentGymDayData(_plannedDays.get(index));
+                        Toast.makeText(context, R.string.updatedday, Toast.LENGTH_SHORT).show();
+                    }
+                    catch(Exception e){
+                        Log.e(TAG, e.toString());
+                    }
+                }
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 //setFeatureGraphic();
                 weekitem.invalidate();
@@ -240,13 +258,41 @@ public class GymDayPickerFragment extends android.support.v4.app.Fragment {
         */
     }
 
+    /**
+     * A method to update layouts in stats fragment when the current gym day status is changed
+     * @param gymDay - True if today is now gym day
+     */
     public void toggleCurrentGymDayData(boolean gymDay) {
         MsgAndDayRecords datasource = MsgAndDayRecords.getInstance();
-
         datasource.openDatabase();
         datasource.updateLatestDayRecordIsGymDay(gymDay);
         MsgAndDayRecords.getInstance().closeDatabase();
         executeUpdateCallback(false); //Update the newsfeed fragment
+    }
+
+    public String getDayOfWeekText(int n){
+        Resources rs = getActivity().getResources();
+
+        switch(n){
+            case 0:
+                return rs.getString(R.string.sat);
+            case 1:
+                return rs.getString(R.string.sun);
+            case 2:
+                return rs.getString(R.string.mon);
+            case 3:
+                return rs.getString(R.string.tue);
+            case 4:
+                return rs.getString(R.string.wed);
+            case 5:
+                return rs.getString(R.string.thur);
+            case 6:
+                return rs.getString(R.string.fri);
+            case 7:
+                return rs.getString(R.string.sat);
+            default:
+                return Integer.toString(n);
+        }
     }
 
 

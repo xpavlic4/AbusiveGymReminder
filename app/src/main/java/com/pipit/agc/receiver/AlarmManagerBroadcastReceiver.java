@@ -70,7 +70,9 @@ public class AlarmManagerBroadcastReceiver extends BroadcastReceiver
 
                 //At this point, we can either show the notification directly, or set a flag and wait for the
                 //device to wake before showing.
-                if (SharedPrefUtil.getInt(context, Constants.PREF_NOTIF_TIME, Constants.NOTIFTIME_ON_WAKEUP)==Constants.NOTIFTIME_ON_WAKEUP){
+                int showtimepref = SharedPrefUtil.getInt(context, Constants.PREF_NOTIF_TIME, -1);
+                Log.d("Yuncun", "showtimepref " + showtimepref + " and reason is " + m.getReason());
+                if (showtimepref ==Constants.NOTIFTIME_ON_WAKEUP && m.getReason() != Message.HIT_TODAY){
                     SharedPrefUtil.putInt(context, Constants.FLAG_WAKEUP_SHOW_NOTIF, 1);
                     SharedPrefUtil.putString(context, Constants.CONTENT_WAKEUP_SHOW_NOTIF, m.toJson());
                 }else{
@@ -110,6 +112,7 @@ public class AlarmManagerBroadcastReceiver extends BroadcastReceiver
 
     /**
      * Executed by Alarm Manager at midnight to add a new day into database
+     * This is not necessarily always called (see AllinOneActivity.updateDate()
      */
     public static void doDayLogging(Context context){
         //Logging
@@ -168,26 +171,4 @@ public class AlarmManagerBroadcastReceiver extends BroadcastReceiver
         ReminderOracle.doLeaveMessageBasedOnPerformance(context, false);
         */
     }
-
-    /**
-     * @deprecated Check out SharedPrefUtil.getGymStatusFromDayOfWeek()
-     * @param context
-     * @param date
-     * @return
-     */
-    private static boolean isTheNewDayAGymDay(Context context, Date date){
-        SharedPreferences prefs = context.getSharedPreferences(Constants.SHARED_PREFS, Context.MODE_MULTI_PROCESS);
-        List<String> plannedDOWstrs = SharedPrefUtil.getListFromSharedPref(prefs, Constants.SHAR_PREF_PLANNED_DAYS);
-        List<Integer> plannedDOW = Util.listOfStringsToListOfInts(plannedDOWstrs);
-        HashSet<Integer> set = new HashSet<Integer>(plannedDOW);
-        Calendar cal = Calendar.getInstance();
-        cal.setTime(date);
-        int DOW = cal.get(Calendar.DAY_OF_WEEK);
-        DOW--;
-        if (set.contains(DOW)){
-            return true;
-        }
-        else return false;
-    }
-
 }

@@ -2,19 +2,27 @@ package com.pipit.agc.adapter;
 
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
+import android.os.CountDownTimer;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.CardView;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.pipit.agc.R;
-import com.pipit.agc.controller.DayrecordClickListener;
+import com.pipit.agc.controller.DayrecordDialog;
+import com.pipit.agc.data.MsgAndDayRecords;
 import com.pipit.agc.fragment.StatisticsFragment;
 import com.pipit.agc.model.DayRecord;
+import com.pipit.agc.util.Constants;
+import com.pipit.agc.util.NotificationUtil;
 import com.pipit.agc.util.SharedPrefUtil;
 import com.pipit.agc.util.StatsContent;
 import com.pipit.agc.util.StatsContent.Stat;
@@ -30,7 +38,8 @@ import java.util.List;
 import iSoron.HistoryChart;
 
 public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<StatisticsRecyclerViewAdapter.ViewHolder>
-    implements DayrecordClickListener.DayrecordObserver {
+    implements DayrecordDialog.DayrecordObserver {
+    private static final String TAG = "StatsAdapter";
     private final StatsContent mStats;
     private StatisticsFragment mFrag;
 
@@ -65,8 +74,6 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
                 view = LayoutInflater.from(parent.getContext())
                         .inflate(R.layout.stats_row_item, parent, false);
             }
-
-
         return new ViewHolder(view);
     }
 
@@ -77,42 +84,73 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
         switch (type){
             case 0:
                 //daily stat card;
-                DayViewHolder dv = ((DayViewHolder) holder);
-                holder.mTitleView.setText("Today");
-                DayRecord today = mStats.getToday(true);
+                Log.d(TAG, "onBindView of daystats");
+                final DayViewHolder dv = ((DayViewHolder) holder);
+                holder.mTitleView.setText(mFrag.getContext().getString(R.string.today));
+                final DayRecord today = mStats.getToday(true);
+
+                //There are two possible states:
+                //  1) We are currently not visiting a gym
+                //  2) We are currently visiting a gym
+                if (!today.isCurrentlyVisiting()) {
+                    dv.gymstate_circle_layout.setVisibility(View.VISIBLE);
+                    dv.endvisit_layout.setVisibility(View.GONE);
+
+                    if (today.beenToGym() || today.getTotalVisitsMinutes()>0) {
+                        SimpleDateFormat sdf = new SimpleDateFormat("h:mma");
+                        String s = SharedPrefUtil.getLastVisitString(mFrag.getContext(), sdf);
+                        String prefix = mFrag.getContext().getString(R.string.recordedtodayat);
+                        if (s == null || s.equals("")) {
+                            dv.gymstate_text.setText(mFrag.getContext().getString(R.string.lastvisit));
+                        } else {
+                            dv.gymstate_text.setText(prefix + " " + s);
+                        }
+                    } else {
+                        dv.gymstate_text.setText(mFrag.getContext().getString(R.string.norecordtoday));
+                        String s = SharedPrefUtil.getLastVisitString(mFrag.getContext(), null);
+                        if (s != null) {
+                            dv.lastvisit_text.setText((mFrag.getContext().getString(R.string.lastvisit)) + " " + s);
+                            dv.lastvisit_text.setVisibility(View.VISIBLE);
+                        }
+                    }
+                }else{
+                    //CURRENTLY VISITING GYM
+                    dv.gymstate_text.setText(R.string.youareatthegym);
+                    dv.gymstate_text.setTextColor(Util.getStyledColor(mFrag.getContext(),
+                            R.attr.colorAccent));
+                    //Show end visit button
+                    dv.endvisit_layout.setVisibility(View.VISIBLE);
+                    String starttime = "";
+
+                    //This can throw exception, but it shouldn't.
+                    //If it does, we have problem
+                    try{
+                        DayRecord.Visit v = today.getVisits().get(today.getVisits().size()-1);
+                        starttime = v.in.toString("h:mm a");
+                    }catch (IndexOutOfBoundsException e){
+                        Log.e(TAG, "No visit found in day");
+                    }
+
+                    dv.visitingsince_text.setText(mFrag.getString(R.string.since) + " " + starttime);
+                    dv.endvisit_button.setOnClickListener(endVisitListener);
+                }
+                dv.gymstate_text.setTextSize(30);
+
                 dv.gymstate_circle.setShowSubtitle(false);
-                if (today.isGymDay()){
-                    dv.gymstate_circle.setTitleText("GYM\nDAY");
+                if (today.isGymDay() && !today.beenToGym()) {
+                    dv.gymstate_circle.setTitleText(mFrag.getContext().getString(R.string.gymday));
                     dv.gymstate_circle.setStrokeColor(Util.getStyledColor(mFrag.getContext(),
                             R.attr.missColor));
-                }else{
-                    dv.gymstate_circle.setTitleText("REST\nDAY");
+                } else {
+                    dv.gymstate_circle.setTitleText(mFrag.getContext().getString(R.string.restday));
                     dv.gymstate_circle.setStrokeColor(Util.getStyledColor(mFrag.getContext(),
                             R.attr.explicitHitColor));
                 }
-                if (today.beenToGym()){
-                    SimpleDateFormat sdf = new SimpleDateFormat("h:mm a");
-                    String s = SharedPrefUtil.getLastVisitString(mFrag.getContext(), sdf);
-                    String prefix = "Gym visit recorded today at ";
-                    if (s==null || s.equals("")){
-                        dv.gymstate_text.setText("Gym visit recorded today");
-                    }else{
-                        dv.gymstate_text.setText(prefix + s);
-                    }
-                }else{
-                    dv.gymstate_text.setText("No gym visit recorded today");
-                    String s = SharedPrefUtil.getLastVisitString(mFrag.getContext(), null);
-                    if (s!=null){
-                        dv.lastvisit_text.setText("Last visit: " + s);
-                        dv.lastvisit_text.setVisibility(View.VISIBLE);
-                    }
-                }
-                dv.gymstate_text.setTextSize(30);
                 break;
 
             case 1:
                 //weekly_stats_card;
-                holder.mTitleView.setText("Last seven days");
+                holder.mTitleView.setText(mFrag.getContext().getString(R.string.lastsevendays));
                 final WeeklyViewHolder wv = (WeeklyViewHolder) holder;
                 CalendarWeekViewAdapter cwva = new CalendarWeekViewAdapter(mFrag.getActivity(), allPreviousDays, wv.calendar);
                 cwva.setObserver(this);
@@ -122,20 +160,13 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
                 wv.sparkgraph.setAdapter(new MySparkAdapter(data));
                 wv.sparkgraph.setAnimateChanges(true);
                 wv.sparkgraph.setScrubEnabled(true);
-                wv.sparkgraph.setCornerRadius(5.0f);
-                wv.sparkgraph.setLineColor(ContextCompat.getColor(mFrag.getContext(), R.color.schemethree_darkerteal));
+                wv.sparkgraph.setCornerRadius(.125f);
+                wv.sparkgraph.setLineColor(Util.getStyledColor(mFrag.getContext(),
+                        R.attr.explicitHitColor));
                 wv.sparkgraph.setScrubListener(new SparkView.OnScrubListener() {
                     @Override
                     public void onScrubbed(Object value) {
-                        /*)
-                        if (d1 == true) {
-                            ((MySparkAdapter) wv.sparkgraph.getAdapter()).update(data2);
-                            d1 = false;
-                        } else {
-                            ((MySparkAdapter) wv.sparkgraph.getAdapter()).update(data);
-                            d1 = true;
-                        }
-                        */
+                        //Todo: Show time?
                     }
                 });
                 Paint baseLinePaint = wv.sparkgraph.getBaseLinePaint();
@@ -151,7 +182,7 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
                 //wv.calendar.styleFromDayrecordsData(mFrag.getContext(), mStats.getAllDayRecords(false));
                 break;
             case 2:
-                holder.mTitleView.setText("History");
+                holder.mTitleView.setText(mFrag.getContext().getString(R.string.history));
                 MonthViewHolder mv = (MonthViewHolder) holder;
 
                 /*Populate*/
@@ -173,7 +204,7 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
                 mHistoryChart = mv.historyChart;
                 break;
             case 3:
-                holder.mTitleView.setText("Streaks");
+                holder.mTitleView.setText(mFrag.getContext().getString(R.string.streaks));
                 MiscStatsViewHolder msv = (MiscStatsViewHolder) holder;
                 /* Text */
                 msv.stat_circle_1.setTitleText(mStats.STAT_MAP.get(StatsContent.CURRENT_STREAK).get() + "");
@@ -191,9 +222,11 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
                 msv.stat_circle_1.setShowSubtitle(false);
                 msv.stat_circle_2.setShowSubtitle(false);
 
-                msv.stat_circle_1.setStrokeColor(ContextCompat.getColor(mFrag.getContext(), R.color.schemethree_darkerteal));
+                msv.stat_circle_1.setStrokeColor(Util.getStyledColor(mFrag.getContext(),
+                        R.attr.explicitHitColor));
                 msv.stat_circle_1.setTitleColor(ContextCompat.getColor(mFrag.getContext(), R.color.basewhite));
-                msv.stat_circle_2.setStrokeColor(ContextCompat.getColor(mFrag.getContext(), R.color.schemethree_darkerteal));
+                msv.stat_circle_2.setStrokeColor(Util.getStyledColor(mFrag.getContext(),
+                        R.attr.explicitHitColor));
                 msv.stat_circle_2.setTitleColor(ContextCompat.getColor(mFrag.getContext(), R.color.basewhite));
                 break;
             default:
@@ -208,17 +241,25 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
     }
 
     public class DayViewHolder extends StatisticsRecyclerViewAdapter.ViewHolder{
+        public final LinearLayout gymstate_circle_layout;
+        public final LinearLayout endvisit_layout;
         public final CircleView gymstate_circle;
         public final TextView gymstate_text;
         public final TextView lastvisit_text;
         public final CardView rootlayout;
+        public final TextView visitingsince_text;
+        public final Button endvisit_button;
 
         public DayViewHolder(View view){
             super(view);
             rootlayout = (CardView) view.findViewById(R.id.dailystatscard);
+            gymstate_circle_layout = (LinearLayout) view.findViewById(R.id.gymstate_circle_layout);
             gymstate_circle = (CircleView) view.findViewById(R.id.gymstate_circle);
             gymstate_text = (TextView) view.findViewById(R.id.gymstate_text);
             lastvisit_text = (TextView) view.findViewById(R.id.last_visit_txt);
+            endvisit_layout = (LinearLayout) view.findViewById(R.id.endvisitlayout);
+            visitingsince_text = (TextView) view.findViewById(R.id.start_time_txt);
+            endvisit_button = (Button) view.findViewById(R.id.daystat_endvisit_button);
         }
     }
 
@@ -252,9 +293,46 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
             List<DayRecord> days = new ArrayList( StatsContent.getInstance().getAllDayRecords(false));
             int index = days.size() - 1 - offset;
             if (index>=days.size() || index < 0) return;
-            DayrecordClickListener dcl = new DayrecordClickListener(days.get(index), mFrag.getContext());
+            DayrecordDialog dcl = new DayrecordDialog(days.get(index), mFrag.getContext());
             dcl.setObserver(getSelf());
             dcl.onClick(null);
+        }
+    };
+    private View.OnClickListener endVisitListener = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            try {
+                DayRecord today = mStats.getToday(false);
+                MsgAndDayRecords datasource;
+                datasource = MsgAndDayRecords.getInstance();
+                datasource.openDatabase();
+                today.endCurrentVisit();
+                datasource.updateDayRecordVisitsById(today.getId(), today.getSerializedVisitsList());
+                datasource.closeDatabase();
+                NotificationUtil.endNotifications(mFrag.getContext());
+                notifyItemChanged(0);
+                Toast.makeText(mFrag.getContext(),
+                        mFrag.getContext().getString(R.string.endinggymvisit),
+                        Toast.LENGTH_SHORT).show();
+            }catch(Exception e){
+                Toast.makeText(mFrag.getContext(),
+                        mFrag.getContext().getString(R.string.nogymvisittoend),
+                        Toast.LENGTH_SHORT).show();
+            }
+            /*
+            DayRecord today = mStats.getToday(true);
+            if (today.isCurrentlyVisiting()) {
+                if (today.endCurrentVisit()) {
+
+                    Log.d(TAG, "Visit ended via StatsView");
+                }else{
+                    Toast.makeText(mFrag.getContext(),
+                            mFrag.getContext().getString(R.string.nogymvisittoend),
+                            Toast.LENGTH_SHORT).show();
+                    Log.d(TAG, "Attempted to end visit in StatsView but nothing to end!");
+                }
+                notifyItemChanged(0);
+            }*/
         }
     };
 
@@ -317,7 +395,8 @@ public class StatisticsRecyclerViewAdapter extends RecyclerView.Adapter<Statisti
         if (mHistoryChart!=null){
             mHistoryChart.postInvalidate();
         }
-        notifyDataSetChanged();
+        mStats.refreshDayRecords();
+        notifyItemChanged(0);
+        notifyDataSetChanged(); //Does this do anything? I dont have a dataset really
     }
-
 }

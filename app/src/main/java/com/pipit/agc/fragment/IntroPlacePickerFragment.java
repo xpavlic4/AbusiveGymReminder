@@ -13,6 +13,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -26,6 +27,7 @@ import com.google.android.gms.location.places.ui.PlacePicker;
 import com.google.android.gms.maps.model.LatLng;
 import com.pipit.agc.R;
 import com.pipit.agc.activity.IntroductionActivity;
+import com.pipit.agc.controller.GeofenceController;
 import com.pipit.agc.model.Gym;
 import com.pipit.agc.util.Constants;
 import com.pipit.agc.util.SharedPrefUtil;
@@ -65,11 +67,10 @@ public class IntroPlacePickerFragment extends Fragment {
                 startPlacePicker();
             }
         });
-        //pickerlauncher.setBackgroundColor(ContextCompat.getColor(getContext(), R.color.schemefour_darkerteal));
         pickercardtext = (TextView) pickerlauncher.findViewById(R.id.gym_name);
         pickercardtext.setText("Touch here to find your gym");
-        TextView removebutton = (TextView) pickerlauncher.findViewById(R.id.removeButton);
-        removebutton.setVisibility(View.GONE);
+        //ImageView removebutton = (ImageView) pickerlauncher.findViewById(R.id.location_overflow);
+        //removebutton.setVisibility(View.GONE);
 
         pickersubtitle = (TextView) pickerlauncher.findViewById(R.id.content);
 
@@ -182,6 +183,7 @@ public class IntroPlacePickerFragment extends Fragment {
             Log.d(TAG, "addGeoFenceFromListPosition gym retrieved from " + gym.proxid + " is null");
             return;
         }
+        /*
         Geofence g = new Geofence.Builder()
                 .setRequestId(Integer.toString(gym.proxid))
                 .setCircularRegion(
@@ -194,10 +196,22 @@ public class IntroPlacePickerFragment extends Fragment {
                 .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_DWELL)
                         //.setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER |
                         //        Geofence.GEOFENCE_TRANSITION_EXIT)
-                .build();
-
+                .build(); */
+        GeofenceController.getInstance().addGeofenceByGym(gym, mListener, true);
         SharedPrefUtil.addGeofenceToSharedPrefs(getContext(), gym);
     }
+
+    private GeofenceController.GeofenceControllerListener mListener  = new GeofenceController.GeofenceControllerListener() {
+        @Override
+        public void onGeofencesUpdated() {
+            Log.d(TAG, "Added geofence from IntroPlacePickerFragment");
+        }
+
+        @Override
+        public void onError() {
+            Toast.makeText(getContext(), "Error adding geofence", Toast.LENGTH_SHORT);
+        }
+    };
 
 }
 

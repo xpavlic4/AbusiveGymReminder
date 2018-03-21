@@ -99,19 +99,20 @@ public class NewsfeedAdapter extends RecyclerView.Adapter<NewsfeedAdapter.CardVi
         holder.comment.setText(m.getBody());
         holder.timestamp.setText(m.getIntelligentDateString());
         holder.icon.setBackground(ContextCompat.getDrawable(mFrag.getContext(), R.drawable.circle));
-        //holder.rlayout.setBackgroundColor(ContextCompat.getColor(mFrag.getContext(), R.color.));
         holder.timestamp.setTextColor(ContextCompat.getColor(mFrag.getContext(), R.color.black));
 
 
         if (m.getReason()== Message.HIT_YESTERDAY) {
             holder.reason.setText(r.getText(R.string.reason_hit_gym_yesterday));
-            holder.icon.getBackground().setColorFilter(ContextCompat.getColor(mFrag.getContext(), R.color.schemethree_teal), PorterDuff.Mode.SRC_ATOP);
+            holder.icon.getBackground().setColorFilter(Util.getStyledColor(mFrag.getContext(),
+                    R.attr.explicitHitColor), PorterDuff.Mode.SRC_ATOP);
             holder.reason.setVisibility(View.VISIBLE);
             holder.icon.setVisibility(View.VISIBLE);
         }
         if (m.getReason()== Message.MISSED_YESTERDAY) {
             holder.reason.setText(r.getText(R.string.reason_missed_gym));
-            holder.icon.getBackground().setColorFilter(ContextCompat.getColor(mFrag.getContext(), R.color.schemethree_red), PorterDuff.Mode.SRC_ATOP);
+            holder.icon.getBackground().setColorFilter(Util.getStyledColor(mFrag.getContext(),
+                    R.attr.missColor), PorterDuff.Mode.SRC_ATOP);
             holder.reason.setVisibility(View.VISIBLE);
             holder.icon.setVisibility(View.VISIBLE);
         }
@@ -119,30 +120,18 @@ public class NewsfeedAdapter extends RecyclerView.Adapter<NewsfeedAdapter.CardVi
             holder.reason.setText(r.getText(R.string.reason_hit_gym));
             holder.reason.setVisibility(View.VISIBLE);
             holder.icon.setVisibility(View.VISIBLE);
-            holder.icon.getBackground().setColorFilter(ContextCompat.getColor(mFrag.getContext(), R.color.schemethree_teal), PorterDuff.Mode.SRC_ATOP);
+            holder.icon.getBackground().setColorFilter(Util.getStyledColor(mFrag.getContext(),
+                    R.attr.explicitHitColor), PorterDuff.Mode.SRC_ATOP);
         }
         if (m.getReason() == Message.WELCOME) {
-            holder.icon.getBackground().setColorFilter(ContextCompat.getColor(mFrag.getContext(), R.color.schemefour_yellow), PorterDuff.Mode.SRC_ATOP);
+            holder.icon.getBackground().setColorFilter(Util.getStyledColor(mFrag.getContext(),
+                    R.attr.goldColor), PorterDuff.Mode.SRC_ATOP);
             holder.reason.setText(r.getText(R.string.welcome));
         }
         if (m.getReason() == Message.NEW_MSG){
-            holder.icon.getBackground().setColorFilter(ContextCompat.getColor(mFrag.getContext(), R.color.schemefour_yellow), PorterDuff.Mode.SRC_ATOP);
+            holder.icon.getBackground().setColorFilter(Util.getStyledColor(mFrag.getContext(),
+                    R.attr.goldColor), PorterDuff.Mode.SRC_ATOP);
             holder.reason.setText(r.getText(R.string.new_msg));
-        }
-        //holder.iconwrapper.setLayoutParams(new RelativeLayout.LayoutParams(holder.iconwrapper.getMeasuredHeight(), holder.iconwrapper.getMeasuredHeight()));
-        //holder.reason.setTextSize(12);
-        //holder.timestamp.setTextSize(12);
-
-        //Todo:Reenable this when we figure out why it's randomly evaluating to true
-        //if (!m.getRead()){
-        if (false) {
-            //Todo: Add "read" field to databaseace(null, Typeface.BOLD);
-            holder.reason.setTextColor(ContextCompat.getColor(mFrag.getContext(), R.color.black));
-            holder.reason.setTypeface(holder.reason.getTypeface(), Typeface.BOLD);
-            holder.timestamp.setTextColor(ContextCompat.getColor(mFrag.getContext(), R.color.black));
-            holder.timestamp.setTypeface(holder.reason.getTypeface(), Typeface.BOLD);
-            //holder.header.setTypeface(holder.comment.getTypeface(), Typeface.BOLD);
-            //holder.timestamp.setTypeface(holder.timestamp.getTypeface(), Typeface.BOLD);
         }
 
         if (selectionMode && _selectedPos.contains(position)){
@@ -165,19 +154,12 @@ public class NewsfeedAdapter extends RecyclerView.Adapter<NewsfeedAdapter.CardVi
                 Intent intent = new Intent(mFrag.getContext(), MessageBodyActivity.class);
                 intent.putExtra(Constants.MESSAGE_ID, _messages.get(mpos).getId());
                 mFrag.getContext().startActivity(intent);
-                //_messages.get(mpos).setRead(true);
                 MsgAndDayRecords datasource = MsgAndDayRecords.getInstance();
                 datasource.openDatabase();
                 datasource.markMessageRead(_messages.get(mpos).getId(), true);
-                //_messages=datasource.getAllMessages();
                 datasource.closeDatabase();
                 _messages = StatsContent.getInstance().getAllMessagesReverse(true);
                 notifyDataSetChanged();
-                /*
-                holder.reason.setTextColor(ContextCompat.getColor(mFrag.getContext(), android.R.color.primary_text_light));
-                holder.reason.setTypeface(holder.reason.getTypeface(), Typeface.NORMAL);
-                holder.timestamp.setTextColor(ContextCompat.getColor(mFrag.getContext(), android.R.color.primary_text_dark));
-                holder.timestamp.setTypeface(holder.reason.getTypeface(), Typeface.NORMAL);*/
            }
         });
 
@@ -187,12 +169,11 @@ public class NewsfeedAdapter extends RecyclerView.Adapter<NewsfeedAdapter.CardVi
                 if (mFrag.getCab()==null) return false;
                 if (selectionMode) return false;
                 selectionMode = true;
-                //v.setSelected(true);
-                //notifyDataSetChanged();
                 mFrag.getCab()
                         .setMenu(R.menu.cab_menu)
                         .setTitle("Manage Inbox")
-                        .setBackgroundColor(ContextCompat.getColor(mFrag.getContext(), R.color.schemethree_darkerteal))
+                        .setBackgroundColor(Util.getStyledColor(mFrag.getContext(),
+                                R.attr.colorAccent))
                         .start(mCabCallback);
                 _selectedPos.add(position);
                 notifyItemChanged(position);

@@ -81,7 +81,7 @@ public class DayPickerWeekViewSwipeable extends WeekViewSwipeable {
                     List<String> dates = SharedPrefUtil.getListFromSharedPref(prefs, Constants.SHAR_PREF_PLANNED_DAYS);
 
                     if (_allDayRecords.get(index)) {
-                        //The clicked date was previously a Gym Day, and we need to toggle it off
+                        //The clicked date was previously a Gym Day, and we need to showTimePickers it off
                         _allDayRecords.set(index, false);
                         dates.remove(Integer.toString(index)); //This is used to keep our sharedprefs records straight
                         cv.setTitleText(restDay);
@@ -96,7 +96,8 @@ public class DayPickerWeekViewSwipeable extends WeekViewSwipeable {
                         _allDayRecords.set(index, false);
                         dates.add(Integer.toString(index));
                         cv.setTitleText(gymDay);
-                        cv.setBackgroundColor(ContextCompat.getColor(context, R.color.schemethree_darkerteal));
+                        cv.setBackgroundColor(Util.getStyledColor(getContext(),
+                                R.attr.explicitHitColor));
                         /*
                         if (position == Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1) {
                             if (mFrag instanceof GymPickerVerticalFragment) {
@@ -111,8 +112,10 @@ public class DayPickerWeekViewSwipeable extends WeekViewSwipeable {
 
 
             if (index == _allDayRecords.size() - 1) {
-                cv.setStrokeColor(ContextCompat.getColor(context, R.color.schemefour_yellow));
-                rfd.setTextColor(ContextCompat.getColor(context, R.color.schemefour_yellow));
+                cv.setStrokeColor(Util.getStyledColor(getContext(),
+                        R.attr.goldColor));
+                rfd.setTextColor(Util.getStyledColor(getContext(),
+                        R.attr.goldColor));
                 rfd.setText("Today");
             }
         }

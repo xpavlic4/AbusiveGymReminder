@@ -5,8 +5,10 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.os.Build;
+import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.TaskStackBuilder;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
@@ -14,6 +16,7 @@ import android.widget.RemoteViews;
 
 import com.pipit.agc.R;
 import com.pipit.agc.activity.AllinOneActivity;
+import com.pipit.agc.model.DayRecord;
 import com.pipit.agc.model.Message;
 
 /**
@@ -30,12 +33,14 @@ public class NotificationUtil {
      * @param reason Specifies if this is shown for missing/hitting a gym
      * @param reason_line Optional bottom left corner, offers explanation of message ("Tuesday, July 4th was a gym day")
      * @param attr_line Optional bottom right corner, offers credit to author of message
+     * @param id ID of message, if applicable
      */
-    public static void showNotification(Context context, String header, String body, String reason_line, String attr_line, int reason){
+    public static void showNotification(Context context, String header, String body, String reason_line, String attr_line, int reason, long id){
         int expanded_layoutid = R.layout.expanded_notification;
         int notif_layoutid = R.layout.notification_layout;
 
         Intent notificationIntent = new Intent(context, AllinOneActivity.class);
+        notificationIntent.putExtra(Constants.MESSAGE_ID, id);
 
         TaskStackBuilder stackBuilder = TaskStackBuilder.create(context);
         stackBuilder.addParentStack(AllinOneActivity.class);
@@ -104,6 +109,68 @@ public class NotificationUtil {
     }
 
     /**
+     * Dedicated method for showing a "visiting gym" notification
+     * @param context
+     * @param header
+     * @param body
+     */
+    public static void showGymVisitingNotification(Context context, String header, String body, boolean vibrate){
+        //Since this notification is "onGoing", it is important that the user is actually at the gym
+        //when it is shown. Otherwise, we may be unable to remove the notification.
+        DayRecord today = StatsContent.getInstance().getToday(true);
+        if (!today.isCurrentlyVisiting()){
+            Log.d(TAG, "Not showing notification because gym visit is not detected");
+            return;
+        }
+
+        Intent notificationIntent = new Intent(context, AllinOneActivity.class);
+        notificationIntent.putExtra(Constants.SHOW_STATS_FLAG, true);
+        TaskStackBuilder stackBuilder = TaskStackBuilder.create(context);
+        stackBuilder.addParentStack(AllinOneActivity.class);
+        stackBuilder.addNextIntent(notificationIntent);
+
+        PendingIntent notificationPendingIntent =
+                stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT);
+        NotificationCompat.Builder builder =
+            new NotificationCompat.Builder(context)
+                .setLargeIcon(BitmapFactory.decodeResource(context.getResources(),
+                        R.drawable.app_icon))
+                .setSmallIcon(R.drawable.notification_icon)
+                .setContentTitle(header)
+                .setOngoing(true)
+                .setStyle(new NotificationCompat.BigTextStyle()
+                        .bigText(body))
+                .setContentText(body)
+                .setContentIntent(notificationPendingIntent);
+        if (vibrate){
+            builder.setVibrate(new long[]{1000, 1000});
+        }
+        NotificationManager mNotificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        // Build the notification
+        Notification notification = builder.build();
+        if (vibrate){
+            //Vibrate
+            notification.defaults |= Notification.DEFAULT_VIBRATE;
+        }
+        // Issue the notification
+        mNotificationManager.notify(0, notification);
+        Log.d("Yuncun", "Notification should be shown");
+    }
+
+    public static void showGymVisitingNotification(Context context, String header, String body){
+        showGymVisitingNotification(context, header, body, true);
+    }
+
+    public static void endNotifications(Context context){
+        Log.d(TAG, "Ending all AbusiveGymReminder notifications");
+        NotificationManager nm =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        nm.cancelAll();
+    }
+
+    /**
      * A helper funciton for retrieving the remoteviews from the notification layout
      * @param context
      * @param layout
@@ -123,5 +190,4 @@ public class NotificationUtil {
 
         return notificationView;
     }
-
 }

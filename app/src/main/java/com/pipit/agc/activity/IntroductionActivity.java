@@ -23,6 +23,7 @@ public class IntroductionActivity extends FragmentActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.introduction_layout);
         selectFrag(0);
+        AllinOneActivity.checkPermissions(this);
     }
 
 
@@ -38,7 +39,7 @@ public class IntroductionActivity extends FragmentActivity {
         }
         else
         {
-            Toast.makeText(this, "Press the back button again to exit app.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.pressbacktoexit), Toast.LENGTH_SHORT).show();
             backButtonCount++;
         }
     }

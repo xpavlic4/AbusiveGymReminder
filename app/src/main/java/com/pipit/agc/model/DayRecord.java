@@ -13,6 +13,7 @@ import com.pipit.agc.util.Util;
 
 import org.joda.time.LocalDateTime;
 import org.joda.time.Minutes;
+import org.joda.time.Seconds;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 
@@ -21,6 +22,8 @@ import java.lang.reflect.Type;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 
@@ -49,6 +52,69 @@ public class DayRecord {
                 return Minutes.minutesBetween(in, LocalDateTime.now()).getMinutes();
             }
             return Minutes.minutesBetween(in, out).getMinutes();
+        }
+
+        public int getVisitTimeSeconds(){
+            if (in == null) return 0;
+
+            if (out == null){
+                //last visit not completed
+                return Seconds.secondsBetween(in, LocalDateTime.now()).getSeconds();
+            }
+            return Seconds.secondsBetween(in, out).getSeconds();
+        }
+
+        public String printin(){
+            String ret = "";
+            DateTimeFormatter dtfOut = DateTimeFormat.forPattern("h:mm a");
+
+            if (in==null){
+                return ret; //Should never happen
+            }
+            ret += dtfOut.print(in);
+            return ret;
+        }
+
+        public String printout(){
+            String ret = "";
+            DateTimeFormatter dtfOut = DateTimeFormat.forPattern("h:mm a");
+            if (out == null){
+                ret += " ? ";
+            }
+            else{
+                ret += dtfOut.print(out);
+            }
+            return ret;
+        }
+
+        public String print(){
+            String ret = "";
+            DateTimeFormatter dtfOut = DateTimeFormat.forPattern("h:mm a");
+
+                if (in==null){
+                    return ret; //Should never happen
+                }
+                ret += dtfOut.print(in);
+                ret += " - ";
+                if (out == null){
+                    ret += " ? ";
+                }
+                else{
+                    ret += dtfOut.print(out);
+                }
+            return ret;
+        }
+
+        /**
+         * Returns
+         * -1 if argument is less than this visit
+         * 0 if argument is equal to this visit
+         * 1 if argument is greater to this visit
+         * @param v
+         * @return
+         */
+        public int compareTo(Visit v){
+            return in.compareTo(v.in); //Well this was easy
         }
     }
 
@@ -192,8 +258,20 @@ public class DayRecord {
         }
         if (!visits.isEmpty() && visits.get(visits.size()-1).out == null){
             //If we try to start a new session while the prev hasn't finished, then something went wrong.
-            //We will remove this entry.
-            visits.remove(visits.size()-1);
+            Log.e(TAG, "** Attempted to start a visit on an existing OPEN VISIT -" +
+                    "this may happen if geofences are replaced mid-visit");
+            //There isn't a perfect way of dealing with this, but we can estimate when this happens during
+            //a visit and when this happens for some other reason
+
+            LocalDateTime now = new LocalDateTime();
+            LocalDateTime then = visits.get(visits.size()-1).in;
+            int minutesbetween = Minutes.minutesBetween(then, now).getMinutes();
+            Log.d(TAG, "Last open visit was " + minutesbetween + " ago ");
+            if (minutesbetween > Constants.REASONABLE_GYMTIME_UPPERLIMIT){
+                visits.remove(visits.size()-1);
+            }else{
+                return; //We effectively are merging visits
+            }
         }
 
         Visit v = new Visit();
@@ -204,12 +282,24 @@ public class DayRecord {
         }
         v.out = null; //Haven't finished yet
         this.visits.add(v);
+
+        //Also, mark today as "visited gym"
+        hasBeenToGym = true;
     }
 
+    /**
+     * Attempts to end a visit
+     * This does not do anything to the database; It only edits the visit of this record
+     * @param ldt
+     * @return True if a visit was ended, False if there was no visit to end
+     */
     public boolean endCurrentVisit(LocalDateTime ldt){
+        //If last visit is open
         if (visits.size()>0 && visits.get(visits.size()-1).out==null){
+            //Get last visit
             Visit v = visits.get(visits.size()-1);
             if (ldt == null){
+                //End it
                 v.out = new LocalDateTime();
             }
             else{
@@ -225,6 +315,87 @@ public class DayRecord {
         if (visits!=null){
             visits.add(new Visit(in, out));
         }
+    }
+
+    /**
+     * Adds a visit, and merges overlapping subsets caused by the addition.
+     *
+     * The merging process is basically the overlapping subsets problem, which is a common interview
+     * question.
+     *
+         1) Find location to insert new subset by comparing start times
+            Note that the list is always in sorted order (visits naturally are added in chronological
+            order anyway).
+
+     The following steps are copied from geekstogeeks
+
+         2) Traverse sorted intervals starting from first interval,
+         do following for every interval.
+         a) If current interval is not first interval and it
+         overlaps with previous interval, then merge it with
+         previous interval. Keep doing it while the interval
+         overlaps with the previous one.
+         b) Else add current interval to output list of intervals.
+     * @param v
+     */
+    public boolean addVisitAndMergeSubsets(Visit v){
+        if (v.in.compareTo(v.out)>=0){
+            //"in" must be before "out"
+            return false;
+        }
+
+        visits.add(v);
+        Collections.sort(visits, visitComparator);
+
+        visits = merge(visits);
+        return true;
+    }
+    private Comparator<Visit> visitComparator = new Comparator<Visit>() {
+        public int compare(Visit i1, Visit i2) {
+            if (i1.in != i2.in)
+                return i1.in.compareTo(i2.in);
+            else
+                return i1.out.compareTo(i2.out);
+        }
+    };
+
+    private List<Visit> merge(List<Visit> intervals) {
+        List<Visit> result = new ArrayList<>();
+
+        if(intervals==null||intervals.size()==0)
+            return result;
+
+        Collections.sort(intervals, visitComparator);
+
+        Visit pre = intervals.get(0);
+        for(int i=0; i<intervals.size(); i++){
+            Visit curr = intervals.get(i);
+            if(curr.in.compareTo(pre.out)>0){
+                result.add(pre);
+                pre = curr;
+            }else{
+                Visit merged = new Visit();
+                merged.in = pre.in;
+
+                if (pre.out.compareTo(curr.out)>0){
+                    merged.out = pre.out;
+                }else{
+                    merged.out = curr.out;
+                }
+                // Equivalent to : merged = new Visit(pre.in, Math.max(pre.in, curr.out));
+               pre = merged;
+            }
+        }
+        result.add(pre);
+        return result;
+    }
+
+    /**
+     * Remove visit by position in list
+     * @param position
+     */
+    public void removeVisit(int position){
+        visits.remove(position);
     }
 
     /**
@@ -267,12 +438,24 @@ public class DayRecord {
         return ret;
     }
 
-    public int calculateTotalVisitTime(){
+    public int getTotalVisitsMinutes(){
         int minutes = 0;
         for (Visit v : visits){
             minutes += v.getVisitTimeMinutes();
         }
         return minutes;
+    }
+
+    public int getTotalVisitsSeconds(){
+        int secs = 0;
+        for (Visit v : visits){
+            secs += v.getVisitTimeSeconds();
+        }
+        return secs;
+    }
+
+    public int getTotalMinsLastVisit(){
+        return visits.get(visits.size()-1).getVisitTimeMinutes();
     }
 
     /**

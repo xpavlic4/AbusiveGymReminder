@@ -6,14 +6,17 @@ import android.util.Log;
 
 import com.readystatesoftware.sqliteasset.SQLiteAssetHelper;
 
+import java.util.Locale;
+
 /**
  * For the use of the offline message repo
  * Created by Eric on 2/17/2016.
  */
 public class InsultsDBHelper extends SQLiteAssetHelper {
-    public static final String DATABASE_NAME = "messagerepo.db";
+    public static final String DATABASE_NAME = "messagerepo.db"; //Must match name of .db file in src/main/assets/databases/
+    private static final String DATABASE_NAME_ES = "spanishmessagerepo.db"; //For our spanish amigos
     public static final String TABLE_MESSAGES = "Messages";
-    public static final int DATABASE_VERSION = 16;
+    public static final int DATABASE_VERSION = 18; //Update this every time we update messagerepo.db
 
     //Column Names
     public static final String COLUMN_ANGER = "Anger";
@@ -43,7 +46,9 @@ public class InsultsDBHelper extends SQLiteAssetHelper {
             + ");";
 
     public InsultsDBHelper(Context context) {
-        super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        super(context, (Locale.getDefault().getLanguage().equals("es") ? DATABASE_NAME_ES : DATABASE_NAME), null, DATABASE_VERSION);
+        String s = Locale.getDefault().getLanguage();
+        Log.d(InsultsDBHelper.class.getName(), "Language : " + s);
         setForcedUpgrade(DATABASE_VERSION);
     }
 

@@ -1,12 +1,15 @@
 package com.pipit.agc.activity;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.TabLayout;
 import android.support.v4.app.ActivityCompat;
@@ -15,6 +18,7 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.view.ViewPager;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
@@ -26,6 +30,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 
 import com.afollestad.materialcab.MaterialCab;
+import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.pipit.agc.controller.GeofenceController;
 import com.pipit.agc.data.MsgAndDayRecords;
@@ -37,13 +42,12 @@ import com.pipit.agc.fragment.LocationListFragment;
 import com.pipit.agc.fragment.NewsfeedFragment;
 import com.pipit.agc.R;
 import com.pipit.agc.fragment.StatisticsFragment;
-import com.pipit.agc.util.NotificationUtil;
 import com.pipit.agc.util.ReminderOracle;
 import com.pipit.agc.util.SharedPrefUtil;
 import com.pipit.agc.util.StatsContent;
 import com.pipit.agc.model.DayRecord;
+import com.pipit.agc.util.Util;
 
-import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
@@ -59,10 +63,9 @@ public class AllinOneActivity extends AppCompatActivity {
     SectionsPagerAdapter mSectionsPagerAdapter;
     private ViewPager mViewPager;
     private TabLayout mTabLayout;
-    private MaterialCab cab;
-    private FloatingActionButton mFab;
+    private MaterialCab cab; //Contextual action bar - Used in removing messages in newsfeed
+    private FloatingActionButton mFab; //Floating action button - Used in place picker frag to add gym
     private AlarmManagerBroadcastReceiver _alarm = new AlarmManagerBroadcastReceiver();
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,11 +82,21 @@ public class AllinOneActivity extends AppCompatActivity {
                 List<Message> msgs = datasource.getAllMessages();
                 long index = msgs.get(msgs.size()-1).getId(); //This is a bit hacky, but we need to direct user to last msg
                 datasource.closeDatabase();
+
                 Intent intent = new Intent(this, MessageBodyActivity.class);
                 intent.putExtra(Constants.MESSAGE_ID, index);
                 startActivityForResult(intent, 0);
             }
         }
+
+        //Todo:Firsttimecheck
+        GeofenceController.getInstance().init(this);
+        if (SharedPrefUtil.getIsFirstTime(this)){
+            GeofenceController.getInstance().reregisterSavedGeofences();
+        }
+
+        //Check if and show a change log if necessary
+        checkAndShowChangeLog();
 
         //Launch Intro Activity if required
         if (SharedPrefUtil.getIsFirstTime(this)){
@@ -127,8 +140,13 @@ public class AllinOneActivity extends AppCompatActivity {
         mSectionsPagerAdapter = new SectionsPagerAdapter(getSupportFragmentManager());
         mViewPager = (ViewPager) findViewById(R.id.pager);
         mViewPager.setAdapter(mSectionsPagerAdapter);
-        mViewPager.setCurrentItem(1);
 
+        if (getIntent().getBooleanExtra(Constants.SHOW_STATS_FLAG, false)){
+            getIntent().putExtra(Constants.SHOW_STATS_FLAG, true);
+            mViewPager.setCurrentItem(Constants.STATS_FRAG_POS);
+        }else{
+            mViewPager.setCurrentItem(Constants.NEWFEED_FRAG_POS);
+        }
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         if (toolbar != null) {
             setSupportActionBar(toolbar);
@@ -136,10 +154,10 @@ public class AllinOneActivity extends AppCompatActivity {
 
         /*Tab layout stuff*/
         mTabLayout = (TabLayout) findViewById(R.id.tabs);
-        mTabLayout.addTab(mTabLayout.newTab().setText("Stats"));
-        mTabLayout.addTab(mTabLayout.newTab().setText("Inbox"));
-        mTabLayout.addTab(mTabLayout.newTab().setText("Days"));
-        mTabLayout.addTab(mTabLayout.newTab().setText("Gyms"));
+        mTabLayout.addTab(mTabLayout.newTab().setText(getString(R.string.stats)));
+        mTabLayout.addTab(mTabLayout.newTab().setText(getString(R.string.inbox)));
+        mTabLayout.addTab(mTabLayout.newTab().setText(getString(R.string.days)));
+        mTabLayout.addTab(mTabLayout.newTab().setText(getString(R.string.gyms)));
         mTabLayout.setSelectedTabIndicatorColor(ContextCompat.getColor(this, R.color.basewhite));
         mViewPager.addOnPageChangeListener(new TabLayout.TabLayoutOnPageChangeListener(mTabLayout));
         mTabLayout.setupWithViewPager(mViewPager);
@@ -147,7 +165,8 @@ public class AllinOneActivity extends AppCompatActivity {
         //Deal with floating action button used in locationlist fragment. This must be done here because it syncs up
         //with the collapsing toolbar. We just choose to hide it when the wrong fragment is shown.
         mFab = (FloatingActionButton) findViewById(R.id.locationsFab);
-        mFab.setBackgroundColor(ContextCompat.getColor(this, R.color.schemethree_darkerteal));
+        mFab.setBackgroundColor(Util.getStyledColor(this,
+                R.attr.colorAccent));
         mFab.hide();
         mViewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
             @Override
@@ -156,7 +175,7 @@ public class AllinOneActivity extends AppCompatActivity {
 
             @Override
             public void onPageSelected(int position) {
-                if (position == 3) {
+                if (position == Constants.LOCATION_FRAG_POS) {
                     mFab.show();
                 } else {
                     mFab.hide();
@@ -169,15 +188,18 @@ public class AllinOneActivity extends AppCompatActivity {
         });
 
         cab = new MaterialCab(this, R.id.cab_stub);
-        GeofenceController.getInstance().init(this);
-        checkPermissions();
-
         Calendar calendar = Calendar.getInstance();
         calendar.setTimeInMillis(System.currentTimeMillis());
         calendar.set(Calendar.HOUR_OF_DAY, Constants.DAY_RESET_HOUR);
         calendar.set(Calendar.MINUTE, Constants.DAY_RESET_MINUTE);
         calendar.add(Calendar.DATE, Constants.DAYS_TO_ADD);
         AlarmManagerBroadcastReceiver.setAlarmForDayLog(getApplicationContext(), calendar);
+
+        /*Display GPS off warning*/
+        final LocationManager manager = (LocationManager) getSystemService( Context.LOCATION_SERVICE );
+        if ( !manager.isProviderEnabled( LocationManager.GPS_PROVIDER ) ) {
+            buildAlertMessageNoGps();
+        }
     }
 
     @Override
@@ -195,6 +217,11 @@ public class AllinOneActivity extends AppCompatActivity {
             i.putExtra("fragment", "PreferencesFragment");
             startActivityForResult(i, 0);
             return true;
+        }else if (id == R.id.action_startnewvisit){
+            final Intent i = new Intent(this, IndividualSettingActivity.class);
+            i.putExtra("fragment", "ManualVisitFragment");
+            startActivityForResult(i, 0);
+            return true;
         }
         return super.onOptionsItemSelected(item);
     }
@@ -205,7 +232,10 @@ public class AllinOneActivity extends AppCompatActivity {
      */
     public class SectionsPagerAdapter extends FragmentPagerAdapter {
         SparseArray<Fragment> registeredFragments = new SparseArray<Fragment>();
-        String[] title = {"Stats", "Inbox", "Days", "Gyms"};
+        String[] title = {getString(R.string.stats),
+                getString(R.string.inbox),
+                getString(R.string.days),
+                getString(R.string.gyms)};
 
         public SectionsPagerAdapter(FragmentManager fm) {
             super(fm);
@@ -214,13 +244,13 @@ public class AllinOneActivity extends AppCompatActivity {
         @Override
         public Fragment getItem(int position) {
             switch (position){
-                case 0:
+                case Constants.STATS_FRAG_POS:
                     return StatisticsFragment.newInstance(0);
-                case 1:
+                case Constants.NEWFEED_FRAG_POS:
                     return NewsfeedFragment.newInstance();
-                case 2:
+                case Constants.DAYPICKER_FRAG_POS:
                     return GymDayPickerFragment.newInstance(2);
-                case 3:
+                case Constants.LOCATION_FRAG_POS:
                     return LocationListFragment.newInstance(1);
                 default:
                     return NewsfeedFragment.newInstance();
@@ -261,7 +291,11 @@ public class AllinOneActivity extends AppCompatActivity {
         StatsContent stats = StatsContent.getInstance();
         stats.refreshDayRecords();
         stats.refreshMessageRecords();
-        stats.calculateStats();
+        stats.calculateStats(this);
+        Fragment f = mSectionsPagerAdapter.getRegisteredFragment(Constants.STATS_FRAG_POS);
+        if (f instanceof StatisticsFragment){
+            ((StatisticsFragment) f).update();
+        }
         updateDate(this);
         super.onStart();
     }
@@ -284,7 +318,6 @@ public class AllinOneActivity extends AppCompatActivity {
             datasource.openDatabase();
             synchronized (datasource) {
                 DayRecord lastDate = datasource.getLastDayRecord();
-
                 DayRecord todaysDate = new DayRecord();
                 todaysDate.setDate(new Date());
 
@@ -303,9 +336,9 @@ public class AllinOneActivity extends AppCompatActivity {
                             //If there are any visits on that day, we need to end them
                             boolean flagStartNewVisit = false;
                             if (lastDate.isCurrentlyVisiting()){
-                                datasource.closeDatabase();
+                                SharedPrefUtil.updateMainLog(context, "Ending an existing visit");
                                 lastDate.endCurrentVisit();
-                                datasource.openDatabase();
+                                datasource.updateDayRecordVisitsById(lastDate.getId(), lastDate.getSerializedVisitsList());
                                 flagStartNewVisit = true;
                             }
 
@@ -321,10 +354,11 @@ public class AllinOneActivity extends AppCompatActivity {
                             day.setIsGymDay(SharedPrefUtil.getGymStatusFromDayOfWeek(context, cal.get(Calendar.DAY_OF_WEEK)));
                             datasource.createDayRecord(day);
                             if (flagStartNewVisit){
+                                SharedPrefUtil.updateMainLog(context, "Carrying over a visit");
                                 day.startCurrentVisit();
+                                datasource.updateDayRecordVisitsById(day.getId(), day.getSerializedVisitsList());
+                                datasource.updateDayRecordGymStats(day);
                             }
-                            SharedPrefUtil.updateMainLog(context, "Updated day from onStart " + day.getDateString() + " wasGymDay==" + day.isGymDay());
-
                         }
                     } else if (lastDate.getDate().after(todaysDate.getDate())) {
                         //A more nefarious case when we have dates ahead of system time
@@ -345,16 +379,16 @@ public class AllinOneActivity extends AppCompatActivity {
         }
     }
 
-    private void checkPermissions(){
-        if (ContextCompat.checkSelfPermission(this,
+    public static void checkPermissions(Activity context){
+        if (ContextCompat.checkSelfPermission(context,
                 Manifest.permission.READ_CONTACTS)
                 != PackageManager.PERMISSION_GRANTED) {
 
             // Should we show an explanation?
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+            if (ActivityCompat.shouldShowRequestPermissionRationale(context,
                     Manifest.permission.READ_CONTACTS)) {
             } else {
-                ActivityCompat.requestPermissions(this,
+                ActivityCompat.requestPermissions(context,
                         new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
                         Constants.GRANTED_LOCATION_PERMISSIONS);
             }
@@ -382,10 +416,70 @@ public class AllinOneActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == 0) {
-            Fragment f = mSectionsPagerAdapter.getRegisteredFragment(0);
+            Fragment f = mSectionsPagerAdapter.getRegisteredFragment(Constants.STATS_FRAG_POS);
             if (f instanceof StatisticsFragment){
                 ((StatisticsFragment) f).update();
             }
+        }
+    }
+
+    private void buildAlertMessageNoGps() {
+        new MaterialDialog.Builder(this)
+                .title(R.string.gpsdisabled)
+                .content(R.string.enablegpsprompt)
+                .positiveText(R.string.yes)
+                .negativeText(R.string.no)
+                .onPositive(new MaterialDialog.SingleButtonCallback() {
+                    @Override
+                    public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                        startActivity(new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    }
+                })
+                .show();
+    }
+
+    /**
+     * Shows a change log if a change message was added
+     *
+     * Change message comes from changelog.xml. We remember last known version
+     * in sharedpref, and check with new version to determine if change log is needed.
+     *
+     * Changelog.xml also has a field for current version that needs to updated in order
+     * to "activate" the accompanying message; Otherwise, I will forget to update the changelog
+     * at some point and it will show a stale log.
+     *
+     */
+    private void checkAndShowChangeLog(){
+        int oldVers = SharedPrefUtil.getInt(this, Constants.PREF_LAST_KNOWN_VERSION, 0);
+        int newVers = -1; //Don't show change log
+        try{
+            PackageInfo pInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+            newVers = pInfo.versionCode;
+            Log.d(TAG, "Checking for a change log; new version is " + newVers + " and oldvers is " + oldVers);
+        } catch (PackageManager.NameNotFoundException e){
+            Log.e(TAG, "Could not find package name. Vers. number will be unavailable ", e);
+            return;
+        }
+        //Show if newVersion is older than last recorded version
+        if (newVers > oldVers){
+            int failsafe = getResources().getInteger(R.integer.versionOfLastUpdate);
+            if (failsafe != newVers){ //Check that changelog resource is uptodate
+                Log.d(TAG, "Changelog version in changelog.xml not up to date, found: " + failsafe);
+                return;
+            }
+            if (SharedPrefUtil.getIsFirstTime(this)){
+                SharedPrefUtil.putInt(this, Constants.PREF_LAST_KNOWN_VERSION, newVers);
+                return;
+            }
+
+            //Show a changelog dialog
+            MaterialDialog dialog = new MaterialDialog.Builder(this)
+                    .title("Release Notes")
+                    .content(R.string.changeLogBody)
+                    .contentColor(ContextCompat.getColor(this, R.color.black))
+                    .positiveText("Got it")
+                    .show();
+            SharedPrefUtil.putInt(this, Constants.PREF_LAST_KNOWN_VERSION, newVers);
         }
     }
 
@@ -397,5 +491,3 @@ public class AllinOneActivity extends AppCompatActivity {
         return mFab;
     }
 }
-
-
